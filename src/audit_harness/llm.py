@@ -14,6 +14,10 @@ T = TypeVar("T", bound=BaseModel)
 PROMPT_VERSION = "vendor-context-1.0"
 
 
+class MissingLLMKeyError(ValueError):
+    """Live analysis was requested without a configured provider credential."""
+
+
 class Message(StrictModel):
     role: str
     content: str
@@ -51,8 +55,12 @@ class OpenAICompatibleProvider:
     name = "openai-compatible"
 
     def __init__(self, settings: Settings):
-        if not settings.llm_api_key:
-            raise ValueError("AUDIT_LLM_API_KEY is required")
+        if not settings.llm_api_key.strip():
+            raise MissingLLMKeyError(
+                "Set AUDIT_LLM_API_KEY to your LLM provider key in the project-root .env "
+                "or shell environment. AUDIT_API_KEY protects the harness API and is a "
+                "separate credential. Use AUDIT_PROVIDER=offline to run without an LLM key."
+            )
         self.settings, self.model = settings, settings.model
 
     async def structured_generate(self, messages: list[Message], output_schema: type[T]) -> T:

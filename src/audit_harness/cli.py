@@ -32,6 +32,7 @@ def main():
 
     configure_observability()
     from .evaluation import evaluate_run
+    from .llm import MissingLLMKeyError
     from .service import execute
     from .storage import Store
 
@@ -58,6 +59,8 @@ def main():
         )
         if args.command == "evaluate" and not result["quality_gate_passed"]:
             raise SystemExit(1)
+    except MissingLLMKeyError as exc:
+        parser.exit(2, f"Configuration error: {exc}\n")
     finally:
         flush_observability(settings.langfuse_enabled)
         store.engine.dispose()
