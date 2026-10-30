@@ -1,0 +1,10 @@
+{
+  "transaction_id": "TX-0063",
+  "payment_amount": "165840.00",
+  "currency": "EUR",
+  "payment_creator_id": "USR-001",
+  "payment_timestamp": "2026-03-07T12:00:00+00:00",
+  "payment_date": "2026-03-07T12:00:00+00:00",
+  "vendor_id": "VEN-0063",
+  "invoice_id": "INV-0063"
+}

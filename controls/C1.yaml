@@ -1,0 +1,9 @@
+control_id: C1
+name: approval_before_payment
+version: '1.0'
+objective: Prevent unauthorized payments through prior approval.
+population: {currency: EUR, payment_amount_gt: 50000}
+evidence_required: [invoice, payment_record, approval_record]
+tests:
+  - {id: approval_before_payment, type: deterministic, critical: true}
+decision_policy: {min_confidence: 0.85, suspicious_requires_human: true, require_evidence_citations: true}

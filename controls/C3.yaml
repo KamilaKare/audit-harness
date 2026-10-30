@@ -1,0 +1,11 @@
+control_id: C3
+name: suspicious_vendor_onboarding
+version: '1.0'
+objective: Identify large payments within seven days of vendor creation.
+population: {currency: EUR, payment_amount_gt: 20000}
+evidence_required: [payment_record, vendor_record]
+tests:
+  - {id: recent_vendor, type: deterministic, critical: true}
+recent_vendor_days: 7
+llm_context: true
+decision_policy: {min_confidence: 0.85, suspicious_requires_human: true, require_evidence_citations: true}

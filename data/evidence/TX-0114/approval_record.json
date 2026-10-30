@@ -1,0 +1,7 @@
+{
+  "transaction_id": "TX-0114",
+  "approver_id": "USR-002",
+  "approval_timestamp": "2026-02-28T12:00:00+00:00",
+  "status": "approved",
+  "custodian": "synthetic-erp-export"
+}

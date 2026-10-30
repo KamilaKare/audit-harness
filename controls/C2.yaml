@@ -1,0 +1,9 @@
+control_id: C2
+name: segregation_of_duties
+version: '1.0'
+objective: Ensure payment creator and approver represent different people.
+population: {currency: EUR, payment_amount_gt: 50000}
+evidence_required: [payment_record, approval_record, user_identity]
+tests:
+  - {id: different_people, type: deterministic, critical: true}
+decision_policy: {min_confidence: 0.85, suspicious_requires_human: true, require_evidence_citations: true}

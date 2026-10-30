@@ -1,0 +1,8 @@
+{
+  "transaction_id": "TX-0086",
+  "identities": {
+    "USR-001": "PERSON-001",
+    "USR-002": "PERSON-002",
+    "USR-ALIAS": "PERSON-001"
+  }
+}
