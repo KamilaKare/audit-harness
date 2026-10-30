@@ -18,11 +18,37 @@ def main():
         p = sub.add_parser(command)
         p.add_argument("--output", type=Path, default=Path(f"artifacts/{command}.json"))
     sub.add_parser("serve")
+    dashboard_parser = sub.add_parser("dashboard")
+    dashboard_parser.add_argument("--host", default="127.0.0.1")
+    dashboard_parser.add_argument("--port", type=int, default=8501)
     args = parser.parse_args()
     if args.command == "generate":
         generate(args.output, args.count, args.seed)
         print(f"Generated {args.count} synthetic transactions at {args.output}")
         return
+    if args.command == "dashboard":
+        import importlib.util
+        import subprocess
+        import sys
+
+        if importlib.util.find_spec("streamlit") is None:
+            parser.exit(
+                2, "Install the dashboard extra: uv sync --extra dashboard --extra observability\n"
+            )
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                str(Path(__file__).with_name("dashboard.py")),
+                f"--server.address={args.host}",
+                f"--server.port={args.port}",
+                "--server.headless=true",
+            ],
+            check=False,
+        )
+        raise SystemExit(result.returncode)
     if args.command == "serve":
         import uvicorn
 

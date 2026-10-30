@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="AUDIT_", env_file=".env", extra="ignore")
     data_dir: Path = Path("data")
     controls_dir: Path = Path("controls")
+    pricing_file: Path = Path("config/model_pricing.yaml")
     database_url: str = "sqlite:///./audit.db"
     provider: Literal["offline", "openai-compatible"] = "offline"
     model: str = "gpt-4.1-mini"

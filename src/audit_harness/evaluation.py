@@ -4,6 +4,7 @@ import csv
 from collections import Counter
 from pathlib import Path
 
+from .metrics import summarize_metrics
 from .storage import digest
 
 
@@ -11,6 +12,8 @@ def evaluate_run(run: dict, labels_path: Path) -> dict:
     with labels_path.open() as stream:
         labels = list(csv.DictReader(stream))
     expected = {(r["transaction_id"], r["control_id"]): r["expected_outcome"] for r in labels}
+    if not expected:
+        raise ValueError("Ground truth cannot be empty")
     actual = {(d["transaction_id"], d["control_id"]): d for d in run["decisions"]}
     if len(expected) != len(labels) or len(actual) != len(run["decisions"]):
         raise ValueError("Duplicate evaluation keys")
@@ -45,6 +48,11 @@ def evaluate_run(run: dict, labels_path: Path) -> dict:
     )
     return {
         "run_id": run["run_id"],
+        "evaluation_mode": "offline_simulator"
+        if run.get("provider") == "offline"
+        else "control_decisions",
+        "llm_semantic_quality_evaluated": False,
+        "performance": summarize_metrics(run, successful_tasks=successful),
         "labels_sha256": digest({"labels": labels}),
         "decisions": len(expected),
         "accuracy": correct / len(expected),

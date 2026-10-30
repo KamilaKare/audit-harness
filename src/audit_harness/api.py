@@ -3,11 +3,13 @@ import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 
 from .config import Settings, load_controls
 from .evaluation import evaluate_run
-from .models import ReviewRequest
+from .llm import MissingLLMKeyError
+from .metrics import summarize_metrics
+from .models import ReviewRequest, RunRequest
 from .observability import flush_observability
 from .service import execute
 from .storage import Store
@@ -48,15 +50,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         items, digest = load_controls(settings.controls_dir)
         return {"sha256": digest, "controls": items}
 
+    @app.get("/runs", dependencies=protected)
+    def list_runs(
+        limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)
+    ):
+        return store.list_runs(limit, offset)
+
     @app.post("/runs", dependencies=protected, status_code=201)
-    async def run():
+    async def run(request: RunRequest | None = None):
         # Bounded local execution. For larger populations use a durable worker queue.
         if lock.locked():
             raise HTTPException(409, "A run is already executing in this worker")
         async with lock:
             try:
-                result = await execute(settings, store)
+                run_settings = (
+                    settings.model_copy(update={"provider": request.provider})
+                    if request and request.provider
+                    else settings
+                )
+                result = await execute(run_settings, store)
                 return {"run_id": result["run_id"], "decisions": len(result["decisions"])}
+            except MissingLLMKeyError as exc:
+                raise HTTPException(422, str(exc)) from exc
             except (ValueError, OSError) as exc:
                 raise HTTPException(422, "Invalid control configuration or dataset") from exc
 
@@ -85,6 +100,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(422, str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
+
+    @app.get("/runs/{run_id}/metrics", dependencies=protected)
+    def metrics(run_id: str):
+        return summarize_metrics(get(run_id))
 
     @app.get("/runs/{run_id}/evaluation", dependencies=protected)
     def evaluate(run_id: str):

@@ -134,3 +134,61 @@ def test_timezone_and_traversal_ids_rejected(population):
     for change in ({"transaction_id": "../secret"}, {"payment_timestamp": "2026-01-01T00:00:00"}):
         with pytest.raises(ValidationError):
             Transaction.model_validate({**population[0].model_dump(), **change})
+
+
+@pytest.mark.parametrize("missing", [["approval_record"], ["payment_record", "user_identity"]])
+def test_missing_required_evidence_blocks_self_approval_conclusion(
+    dataset, population, controls, missing
+):
+    tx, control = population[2], controls[1]
+    evidence, errors = collect(dataset, tx)
+    evidence = [e for e in evidence if e.kind not in missing]
+    tests = run_tests(tx, control, evidence)
+    result = decide(tx, control, evidence, tests, "in", None, errors)
+    assert tests[0].status == "UNKNOWN"
+    assert result.outcome == "INSUFFICIENT_EVIDENCE"
+
+
+def test_known_sod_failure_survives_error_loading_optional_invoice(
+    tmp_path, population, controls, dataset
+):
+    import shutil
+
+    tx, control = population[2], controls[1]
+    shutil.copytree(
+        dataset / "evidence" / tx.transaction_id, tmp_path / "evidence" / tx.transaction_id
+    )
+    (tmp_path / "evidence" / tx.transaction_id / "invoice.json").write_text("malformed")
+    evidence, errors = collect(tmp_path, tx)
+    tests = run_tests(tx, control, evidence)
+    result = decide(tx, control, evidence, tests, "in", None, errors)
+    assert errors and tests[0].status == "FAIL"
+    assert result.outcome == "FAIL"
+
+
+def test_conflicting_required_payment_prevents_unfounded_sod_failure(dataset, population, controls):
+    tx, control = population[2], controls[1]
+    evidence, errors = collect(dataset, tx)
+    next(e for e in evidence if e.kind == "payment_record").content["payment_creator_id"] = (
+        "SOMEONE-ELSE"
+    )
+    tests = run_tests(tx, control, evidence)
+    result = decide(tx, control, evidence, tests, "in", None, errors)
+    assert tests[0].status == "UNKNOWN" and result.outcome == "INSUFFICIENT_EVIDENCE"
+
+
+def test_established_critical_failure_precedes_unknown_test_and_collection_errors(
+    dataset, population, controls
+):
+    from audit_harness.models import TestResult
+
+    tx, control = population[3], controls[0]
+    evidence, _ = collect(dataset, tx)
+    known_failure = run_tests(tx, control, evidence)[0]
+    unknown = TestResult(
+        test_id="different_people", status="UNKNOWN", reason="Missing identities", citations=[]
+    )
+    result = decide(
+        tx, control, evidence, [known_failure, unknown], "in", None, ["invoice: OSError"]
+    )
+    assert known_failure.status == "FAIL" and result.outcome == "FAIL"

@@ -52,6 +52,46 @@ class Store:
         self.engine = create_engine(url, **kwargs)
         metadata.create_all(self.engine)
 
+    def list_runs(self, limit: int = 50, offset: int = 0) -> list[dict]:
+        with self.engine.connect() as conn:
+            rows = (
+                conn.execute(
+                    select(runs)
+                    .order_by(runs.c.payload["created_at"].as_string().desc(), runs.c.run_id.desc())
+                    .limit(limit)
+                    .offset(offset)
+                )
+                .mappings()
+                .all()
+            )
+        result = []
+        for row in rows:
+            payload = row["payload"]
+            if digest(payload) != row["sha256"]:
+                raise ValueError("Stored run integrity check failed")
+            result.append(
+                {
+                    "run_id": row["run_id"],
+                    "created_at": payload.get("created_at"),
+                    "provider": payload.get("provider", "unknown"),
+                    "model": payload.get("model", "unknown"),
+                    "decision_count": len(payload["decisions"]),
+                }
+            )
+        return result
+
+    @staticmethod
+    def review_options(decision: dict) -> list[str]:
+        if not decision["review_required"]:
+            return []
+        if decision["outcome"] == "FAIL":
+            return ["FAIL"]
+        return (
+            ["PASS", "FAIL", "POLICY_EXCEPTION"]
+            if decision["control_id"] == "C3"
+            else ["PASS", "FAIL"]
+        )
+
     def save(self, payload: dict):
         with self.engine.begin() as conn:
             conn.execute(
@@ -87,7 +127,14 @@ class Store:
                 history = self.review_history(
                     run_id, decision["transaction_id"], decision["control_id"]
                 )
-                result.append({**decision, **history, "resolved": bool(history["revision"])})
+                result.append(
+                    {
+                        **decision,
+                        **history,
+                        "resolved": bool(history["revision"]),
+                        "allowed_outcomes": self.review_options(decision),
+                    }
+                )
         return result
 
     def review(
@@ -113,6 +160,8 @@ class Store:
         # Confirmed deterministic failures remain failures; remediation requires a fresh run.
         if decision["outcome"] == "FAIL" and request.outcome != "FAIL":
             raise ValueError("Cannot override a confirmed deterministic failure")
+        if request.outcome not in self.review_options(decision):
+            raise ValueError("Outcome is not permitted for this review")
         history = self.review_history(run_id, transaction_id, control_id)
         if history["revision"] != request.expected_revision:
             raise RuntimeError("Review revision conflict")

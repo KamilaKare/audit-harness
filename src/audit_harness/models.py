@@ -77,6 +77,19 @@ class Judgment(StrictModel):
     citations: list[str] = Field(min_length=1)
 
 
+class ExecutionMetrics(StrictModel):
+    duration_ms: float = Field(default=0, ge=0)
+    llm_attempted: bool = False
+    llm_succeeded: bool = False
+    llm_duration_ms: float | None = Field(default=None, ge=0)
+    model: str | None = None
+    input_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
+    total_tokens: int | None = Field(default=None, ge=0)
+    estimated_cost_usd: Decimal | None = Field(default=None, ge=0)
+    pricing_version: str | None = None
+
+
 class Decision(StrictModel):
     transaction_id: str
     control_id: str
@@ -89,6 +102,7 @@ class Decision(StrictModel):
     judgment: Judgment | None = None
     review_required: bool
     errors: list[str] = Field(default_factory=list)
+    execution: ExecutionMetrics | None = None
 
 
 class ReviewRequest(StrictModel):
@@ -97,3 +111,7 @@ class ReviewRequest(StrictModel):
     rationale: str = Field(min_length=20, max_length=4000)
     citations: list[str] = Field(min_length=1)
     expected_revision: int = Field(ge=0)
+
+
+class RunRequest(StrictModel):
+    provider: Literal["offline", "openai-compatible"] | None = None

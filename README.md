@@ -35,6 +35,22 @@ ruff format --check .
 
 **Verification:** the complete graph and API tests now run locally, including all 360 fixture outcomes. Langfuse tests use the real SDK and an in-memory exporter to check nesting, observation types, token usage, redaction, session grouping, error handling and async isolation. They do not need cloud credentials. Docker and cloud receipt still require separate verification; see [Langfuse tracing](docs/langfuse.md).
 
+## Business dashboard
+
+A local Streamlit dashboard is available for auditors, with run selection, result charts, filters, readable evidence, contextual model analysis, revisioned human review and performance/cost reporting. It accesses FastAPI; it does not duplicate control rules or write directly to the database.
+
+```sh
+uv sync --locked --extra dashboard --extra dev --extra observability
+# Terminal 1 (restart an already-running backend after updating the code)
+uv run --locked --extra observability audit-harness serve
+# Terminal 2
+uv run --locked --extra dashboard --extra observability audit-harness dashboard
+```
+
+Open http://localhost:8501. The two processes read the same `AUDIT_API_KEY` from `.env`. Start with the three built-in demo dossier buttons. See the [dashboard walkthrough and cost configuration](docs/dashboard.md).
+
+New runs persist execution timings and provider token usage independently of Langfuse. Model costs require explicitly configured, versioned rates in `config/model_pricing.yaml`; unavailable measurements or rates remain unknown. Historic runs stay readable without fabricated zero costs. Synthetic label accuracy remains separate from LLM semantic quality. Reviewer identity remains declarative as agreed for this local demo.
+
 ## Control semantics
 
 | Control | Population | Test | Outcome handling |
@@ -103,6 +119,8 @@ flowchart TD
 | Decision policy | `policy.py` | Deterministic precedence, missing evidence routing, confidence handling, human gate |
 | Persistence and review | `storage.py` | SQLAlchemy/SQLite, immutable run snapshots, hash checks, revisioned human actions |
 | Application | `service.py`, `api.py`, `cli.py` | End-to-end runs, API authentication, command line workflows |
+| Business interface | `dashboard.py`, `dashboard_client.py`, `dashboard_data.py` | Streamlit screens backed by FastAPI and revisioned human review |
+| Runtime metrics | `metrics.py`, `config/model_pricing.yaml` | Timings, actual token usage, pricing snapshots and economic metrics |
 | Evaluation | `evaluation.py`, `synthetic.py` | Independent labels, exact population matching, task success and unsafe-pass gate |
 | Observability | `observability.py` | Metadata-only JSON events, standard OTel spans, optional Langfuse observations |
 
@@ -153,4 +171,4 @@ The service binds only to localhost in Compose, runs as a non-root user and pers
 
 This is a production-oriented prototype, not an unattended audit authority. The shared API key is a local access gate; `reviewer_id` is a recorded assertion and is not authenticated identity. Production deployment needs SSO/RBAC with reviewer identity binding, reviewer independence checks, evidence retention controls, database migrations, durable job scheduling, bounded parallelism, authenticated source connectors, and backups. SQLite is the supported demo persistence target; PostgreSQL can use the SQLAlchemy repository with an installed driver and a migration strategy.
 
-Hash checks detect accidental stored-run mutation, not an attacker who can rewrite the database and recompute hashes. Review history is append-only through the application and preserves prior hashes, but is not externally signed or stored in WORM storage. Local evidence files must be stable for a run; a production collector should ingest a signed, immutable evidence manifest before orchestration. There is no background queue, PDF ingestion, frontend, automatic exception approval, or live model quality claim.
+Hash checks detect accidental stored-run mutation, not an attacker who can rewrite the database and recompute hashes. Review history is append-only through the application and preserves prior hashes, but is not externally signed or stored in WORM storage. Local evidence files must be stable for a run; a production collector should ingest a signed, immutable evidence manifest before orchestration. There is no background queue, PDF ingestion, automatic exception approval, authenticated reviewer identity, or live model quality claim.

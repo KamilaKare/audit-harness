@@ -49,6 +49,8 @@ async def execute(settings: Settings, store: Store, provider: LLMProvider | None
         "run_id": run_id,
         "created_at": datetime.now(UTC).isoformat(),
         "harness_version": "0.1.0",
+        "pricing": harness.pricing.model_dump(mode="json"),
+        "pricing_sha256": hashlib.sha256(harness.pricing.model_dump_json().encode()).hexdigest(),
         "controls_sha256": config_hash,
         "controls": [c.model_dump(mode="json") for c in controls],
         "population_sha256": hashlib.sha256(

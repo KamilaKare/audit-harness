@@ -11,6 +11,7 @@ dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "pydantic>=2.10,<3", "p
 
 [project.optional-dependencies]
 observability = ["langfuse>=4.18,<6"]
+dashboard = ["streamlit>=1.50,<2"]
 dev = ["pytest>=8,<10", "pytest-cov>=6,<8", "ruff>=0.11,<1"]
 
 [project.scripts]

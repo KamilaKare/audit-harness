@@ -176,6 +176,9 @@ class Observation:
 
 def record_model_usage(usage: dict, model: str):
     """Provider telemetry stays task-local, including concurrent async invocations."""
+    from .metrics import capture_provider_usage
+
+    capture_provider_usage(usage, model)
     active = _active_generation.get()
     if active is None or not isinstance(usage, dict):
         return

@@ -8,7 +8,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -e '.[dev,observability]'
+      - run: pip install -e '.[dev,observability,dashboard]'
       - run: ruff check . && ruff format --check .
       - run: pytest --cov=audit_harness --cov-report=term-missing
       - run: audit-harness evaluate --output artifacts/evaluation.json

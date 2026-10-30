@@ -8,5 +8,24 @@ services:
     volumes:
       - audit-runtime:/app/runtime
     restart: unless-stopped
+  dashboard:
+    profiles: ["dashboard"]
+    build:
+      context: .
+      args:
+        INSTALL_EXTRAS: observability,dashboard
+    command: ["audit-harness", "dashboard", "--host", "0.0.0.0"]
+    ports: ["127.0.0.1:8501:8501"]
+    env_file: .env
+    environment:
+      AUDIT_DASHBOARD_API_URL: http://harness:8000
+    depends_on:
+      harness:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 3s
+    restart: unless-stopped
 volumes:
   audit-runtime:

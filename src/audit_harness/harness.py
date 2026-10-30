@@ -8,6 +8,7 @@ from langgraph.graph import END, START, StateGraph
 from .config import Control, Settings
 from .evidence import collect
 from .llm import PROMPT_VERSION, LLMProvider, Message
+from .metrics import load_pricing, measure_control, measure_model
 from .models import Decision, Evidence, Judgment, TestResult, Transaction
 from .observability import observation
 from .policy import decide
@@ -28,6 +29,7 @@ class State(TypedDict, total=False):
 class Harness:
     def __init__(self, settings: Settings, provider: LLMProvider):
         self.settings, self.provider = settings, provider
+        self.pricing = load_pricing(settings.pricing_file)
         graph = StateGraph(State)
         for name, node in [
             ("select", self.select),
@@ -172,13 +174,14 @@ class Harness:
                     "min_confidence": state["control"].decision_policy.min_confidence,
                 },
             ) as span:
-                judgment = await asyncio.wait_for(
-                    self.provider.structured_generate(messages, Judgment),
-                    timeout=self.settings.llm_timeout_seconds,
-                )
-                judgment = Judgment.model_validate(judgment.model_dump())
-                if not set(judgment.citations) <= {e.evidence_id for e in context}:
-                    raise ValueError("Invalid evidence citations")
+                with measure_model(simulated=self.provider.name == "offline"):
+                    judgment = await asyncio.wait_for(
+                        self.provider.structured_generate(messages, Judgment),
+                        timeout=self.settings.llm_timeout_seconds,
+                    )
+                    judgment = Judgment.model_validate(judgment.model_dump())
+                    if not set(judgment.citations) <= {e.evidence_id for e in context}:
+                        raise ValueError("Invalid evidence citations")
                 span.update(
                     output={
                         "recommendation": judgment.recommendation,
@@ -205,23 +208,28 @@ class Harness:
         }
 
     async def evaluate(self, transaction: Transaction, control: Control) -> Decision:
-        with observation(
-            "control.evaluate",
-            {
-                "transaction_id": transaction.transaction_id,
-                "control_id": control.control_id,
-                "control_version": control.version,
-            },
-            self.settings.langfuse_enabled,
-            input={"transaction_id": transaction.transaction_id, "control_id": control.control_id},
-        ) as span:
-            state = await self.graph.ainvoke({"transaction": transaction, "control": control})
-            decision = state["decision"]
-            span.update(
-                output={
-                    "outcome": decision.outcome.value,
-                    "review_required": decision.review_required,
-                    "in_scope": decision.in_scope,
-                }
-            )
-            return decision
+        with measure_control(self.pricing) as execution:
+            with observation(
+                "control.evaluate",
+                {
+                    "transaction_id": transaction.transaction_id,
+                    "control_id": control.control_id,
+                    "control_version": control.version,
+                },
+                self.settings.langfuse_enabled,
+                input={
+                    "transaction_id": transaction.transaction_id,
+                    "control_id": control.control_id,
+                },
+            ) as span:
+                state = await self.graph.ainvoke({"transaction": transaction, "control": control})
+                decision = state["decision"]
+                span.update(
+                    output={
+                        "outcome": decision.outcome.value,
+                        "review_required": decision.review_required,
+                        "in_scope": decision.in_scope,
+                    }
+                )
+        decision.execution = execution
+        return decision

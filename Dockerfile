@@ -3,8 +3,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install --no-cache-dir '.[observability]' && useradd --uid 10001 --create-home auditor
+ARG INSTALL_EXTRAS=observability
+RUN pip install --no-cache-dir ".[${INSTALL_EXTRAS}]" && useradd --uid 10001 --create-home auditor
 COPY controls ./controls
+COPY config ./config
+COPY .streamlit ./.streamlit
 COPY data ./data
 RUN mkdir /app/runtime && chown auditor:auditor /app/runtime
 USER auditor
