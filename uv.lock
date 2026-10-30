@@ -65,7 +65,7 @@ observability = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "langfuse", marker = "extra == 'observability'", specifier = ">=3,<5" },
+    { name = "langfuse", marker = "extra == 'observability'", specifier = ">=4.18,<6" },
     { name = "langgraph", specifier = ">=1,<2" },
     { name = "opentelemetry-api", specifier = ">=1.29,<2" },
     { name = "opentelemetry-sdk", specifier = ">=1.29,<2" },

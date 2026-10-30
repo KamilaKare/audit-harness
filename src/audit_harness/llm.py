@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from .config import Settings
 from .models import StrictModel
+from .observability import record_model_usage
 
 T = TypeVar("T", bound=BaseModel)
 PROMPT_VERSION = "vendor-context-1.0"
@@ -74,7 +75,9 @@ class OpenAICompatibleProvider:
                 },
             )
             response.raise_for_status()
-            choice = response.json()["choices"][0]
+            payload = response.json()
+            record_model_usage(payload.get("usage") or {}, payload.get("model") or self.model)
+            choice = payload["choices"][0]
             if choice.get("finish_reason") != "stop" or choice["message"].get("refusal"):
                 raise ValueError("Incomplete or refused model response")
             return output_schema.model_validate_json(choice["message"]["content"])

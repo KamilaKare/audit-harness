@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from .config import Settings, load_controls
 from .evaluation import evaluate_run
 from .models import ReviewRequest
+from .observability import flush_observability
 from .service import execute
 from .storage import Store
 
@@ -22,12 +23,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from .observability import configure_observability
 
         configure_observability()
-        yield
-        if settings.langfuse_enabled:
-            from langfuse import get_client
-
-            get_client().flush()
-        store.engine.dispose()
+        try:
+            yield
+        finally:
+            await asyncio.to_thread(flush_observability, settings.langfuse_enabled)
+            store.engine.dispose()
 
     app = FastAPI(title="Purchase-to-Pay Audit Harness", version="0.1.0", lifespan=lifespan)
 

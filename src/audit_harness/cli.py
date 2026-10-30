@@ -28,7 +28,7 @@ def main():
 
         uvicorn.run("audit_harness.api:create_app", factory=True, host="0.0.0.0", port=8000)
         return
-    from .observability import configure_observability
+    from .observability import configure_observability, flush_observability
 
     configure_observability()
     from .evaluation import evaluate_run
@@ -59,4 +59,5 @@ def main():
         if args.command == "evaluate" and not result["quality_gate_passed"]:
             raise SystemExit(1)
     finally:
+        flush_observability(settings.langfuse_enabled)
         store.engine.dispose()

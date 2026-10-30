@@ -46,6 +46,14 @@ class Harness:
         self.graph = graph.compile()
 
     def instrument(self, name, node):
+        types = {
+            "select": "span",
+            "collect": "retriever",
+            "test": "evaluator",
+            "analyze": "span",
+            "decide": "guardrail",
+        }
+
         async def instrumented(state: State):
             with observation(
                 f"harness.{name}",
@@ -54,9 +62,45 @@ class Harness:
                     "control_id": state["control"].control_id,
                 },
                 self.settings.langfuse_enabled,
-            ):
+                as_type=types[name],
+                input={
+                    "control_id": state["control"].control_id,
+                    "scope": state.get("scope", "pending"),
+                },
+            ) as span:
                 result = node(state)
-                return await result if inspect.isawaitable(result) else result
+                result = await result if inspect.isawaitable(result) else result
+                if name == "collect":
+                    span.update(
+                        output={
+                            "evidence_count": len(result["evidence"]),
+                            "evidence": [
+                                {"evidence_id": e.evidence_id, "sha256": e.sha256, "kind": e.kind}
+                                for e in result["evidence"]
+                            ],
+                            "error_count": len(result["errors"]),
+                        }
+                    )
+                elif name == "test":
+                    span.update(
+                        output={
+                            "tests": [
+                                {"test_id": t.test_id, "status": t.status} for t in result["tests"]
+                            ]
+                        }
+                    )
+                elif name == "decide":
+                    d = result["decision"]
+                    span.update(
+                        output={
+                            "outcome": d.outcome.value,
+                            "review_required": d.review_required,
+                            "in_scope": d.in_scope,
+                        }
+                    )
+                elif name == "select":
+                    span.update(output={"scope": result["scope"]})
+                return result
 
         return instrumented
 
@@ -112,9 +156,22 @@ class Harness:
                     "provider": self.provider.name,
                     "model": self.provider.model,
                     "prompt_version": PROMPT_VERSION,
+                    "simulated": self.provider.name == "offline",
                 },
                 self.settings.langfuse_enabled,
-            ):
+                as_type="span" if self.provider.name == "offline" else "generation",
+                model=self.provider.model if self.provider.name != "offline" else None,
+                version=PROMPT_VERSION,
+                input={
+                    "prompt_version": PROMPT_VERSION,
+                    "evidence_count": len(context),
+                    "evidence": [
+                        {"evidence_id": e.evidence_id, "sha256": e.sha256, "kind": e.kind}
+                        for e in context
+                    ],
+                    "min_confidence": state["control"].decision_policy.min_confidence,
+                },
+            ) as span:
                 judgment = await asyncio.wait_for(
                     self.provider.structured_generate(messages, Judgment),
                     timeout=self.settings.llm_timeout_seconds,
@@ -122,6 +179,13 @@ class Harness:
                 judgment = Judgment.model_validate(judgment.model_dump())
                 if not set(judgment.citations) <= {e.evidence_id for e in context}:
                     raise ValueError("Invalid evidence citations")
+                span.update(
+                    output={
+                        "recommendation": judgment.recommendation,
+                        "confidence": judgment.confidence,
+                        "citation_count": len(judgment.citations),
+                    }
+                )
                 return {"judgment": judgment}
         except Exception as exc:
             # Exception text may contain credentials or raw documents: persist only type.
@@ -149,6 +213,15 @@ class Harness:
                 "control_version": control.version,
             },
             self.settings.langfuse_enabled,
-        ):
+            input={"transaction_id": transaction.transaction_id, "control_id": control.control_id},
+        ) as span:
             state = await self.graph.ainvoke({"transaction": transaction, "control": control})
-            return state["decision"]
+            decision = state["decision"]
+            span.update(
+                output={
+                    "outcome": decision.outcome.value,
+                    "review_required": decision.review_required,
+                    "in_scope": decision.in_scope,
+                }
+            )
+            return decision

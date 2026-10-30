@@ -33,7 +33,7 @@ ruff check .
 ruff format --check .
 ```
 
-**Verification in the build environment:** 25 core tests passed; one integration test module was skipped because LangGraph and Pandas could not be installed under the environment's DNS restrictions. This validates all 360 fixture outcomes through evidence collection, deterministic tests, and decision policy, plus persistence, review revision conflicts, and a mocked provider HTTP contract. It does **not** establish that the complete graph, server, Docker image, live provider, or Langfuse export has run successfully. The CI workflow installs all dependencies and runs the full suite and evaluation gate.
+**Verification:** the complete graph and API tests now run locally, including all 360 fixture outcomes. Langfuse tests use the real SDK and an in-memory exporter to check nesting, observation types, token usage, redaction, session grouping, error handling and async isolation. They do not need cloud credentials. Docker and cloud receipt still require separate verification; see [Langfuse tracing](docs/langfuse.md).
 
 ## Control semantics
 
@@ -131,7 +131,11 @@ Evidence text is treated as untrusted data, has no tool execution privileges, an
 
 The run bundle stores population snapshots and their hash, parsed control definitions and raw configuration hash, provider/model/prompt versions, all collected evidence contents with original source paths and SHA-256 hashes, deterministic test results, model judgments, error categories, final decisions, timestamps and runtime. This permits inspection after source files change. Original machine decisions never change when humans disposition exceptions.
 
-Set `AUDIT_LANGFUSE_ENABLED=true` and the Langfuse environment variables in `.env` to enable SDK observations. The application emits metadata only, with control/model/prompt identifiers; no document content or credentials are included. Standard OTel trace providers can be configured by deployment auto-instrumentation; the app preserves an existing provider. The built-in SDK generates trace IDs and JSON events; it does not configure an OTLP endpoint or self-host a Langfuse stack. Langfuse observations are flushed on API shutdown.
+Langfuse tracing uses one trace per transaction, with its controls and graph stages nested beneath it. The audit run ID groups those traces as a session. Live model calls are `generation` observations with the returned model name and provider token counts; the offline simulator is a regular span with no invented usage. Retrieval, evaluation and policy stages have specific observation types. Safe inputs/outputs show evidence hashes, test statuses and decisions; raw documents, prompts, rationale, API keys and exception messages are excluded. Run artifacts retain trace IDs for correlation.
+
+The Langfuse project keys are read directly from `.env` after configuration loads, without exporting secrets into the process environment. CLI commands flush before exiting, including failure paths, and the API flushes on shutdown. SDK/export failures cannot change business decisions. Standard OTel trace providers installed by deployment instrumentation are preserved. See [setup, trace structure and verification](docs/langfuse.md).
+
+The upstream [Langfuse skill](skills/langfuse/SKILL.md), its references and MIT license are installed under `skills/langfuse/` and linked from `AGENTS.md` for future turns. This is a project-local installation, not a global Codex installation.
 
 Evaluation reports exact decision accuracy, **end-to-end business task success** (all three controls correct for a transaction), critical failure recall, unsafe PASS count, test citation coverage, review rate, a confusion matrix and individual mismatches. The default quality gate requires every expected decision to match and zero unsafe passes. Labels are scenario specifications authored independently from test logic. Fixture performance establishes deterministic regression behavior, not production model accuracy or confidence calibration. A live-model evaluation should add blinded human labels, citation entailment, exception quality, latency, cost, and calibrated abstention curves.
 
@@ -143,7 +147,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The service binds only to localhost in Compose, runs as a non-root user and persists SQLite in a named volume. Docker builds need package registry access. Dependencies have version bounds; a complete lockfile could not be generated in the restricted build environment. Resolve and lock dependencies in a connected environment before promoting a build.
+The service binds only to localhost in Compose, runs as a non-root user and persists SQLite in a named volume. Docker builds need package registry access. The repository includes `uv.lock`; use `uv sync --locked --extra dev --extra observability` for reproducible local installs. The Docker image currently installs the dependency bounds from `pyproject.toml` rather than the lockfile.
 
 ## Prototype boundaries
 

@@ -27,3 +27,10 @@ def population(dataset):
 @pytest.fixture
 def controls():
     return load_controls(Path("controls"))[0]
+
+
+@pytest.fixture(autouse=True)
+def isolate_external_services(monkeypatch):
+    """A developer's .env must never cause network calls during unit tests."""
+    monkeypatch.setenv("AUDIT_LANGFUSE_ENABLED", "false")
+    monkeypatch.setenv("AUDIT_PROVIDER", "offline")
